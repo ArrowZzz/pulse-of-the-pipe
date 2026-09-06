@@ -7,6 +7,15 @@ from sklearn.ensemble import IsolationForest
 # 1. Page Configuration & Custom Theme Injection
 st.set_page_config(page_title="Pulse of the Pipe | Diagnostics", layout="wide", initial_sidebar_state="expanded")
 
+# Hide the Streamlit toolbar, GitHub icon, and footer
+st.markdown("""
+<style>
+    [data-testid="stToolbar"] {visibility: hidden !important;}
+    [data-testid="stHeader"] {background-color: transparent !important;}
+    footer {visibility: hidden !important;}
+</style>
+""", unsafe_allow_html=True)
+
 # Injecting custom CSS to change the background color from default blue-ish dark to an industrial slate gray
 st.markdown("""
 <style>
