@@ -40,7 +40,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # 2. Sidebar Navigation & Multi-Sensor Array Controls
-st.sidebar.image("https://upload.wikimedia.org/wikipedia/commons/thumb/0/0d/Ministry_of_Energy_Saudi_Arabia.svg/1200px-Ministry_of_Energy_Saudi_Arabia.svg.png", width=200)
+st.sidebar.markdown("### 🇸🇦 Ministry of Energy")
 st.sidebar.title("Asset & Network Controls")
 
 selected_asset = st.sidebar.selectbox("🎯 Select Active Facility", [
