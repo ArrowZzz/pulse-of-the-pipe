@@ -2,9 +2,9 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
+import time
 
 # --- ANTI-CRASH FALLBACK FOR WINDOWS ---
-# This safely intercepts the Windows DLL block and loads a synthetic model locally.
 try:
     from sklearn.ensemble import IsolationForest
 except Exception:
@@ -56,9 +56,11 @@ selected_node = st.sidebar.selectbox("📍 Select Sensor Node", [
     "Node 04: Bypass Valve"
 ])
 
-st.sidebar.markdown("<div style='height: 35vh;'></div>", unsafe_allow_html=True)
+st.sidebar.markdown("<div style='height: 25vh;'></div>", unsafe_allow_html=True)
 st.sidebar.markdown("---")
 st.sidebar.subheader("Diagnostic Controls")
+
+live_stream = st.sidebar.toggle("📡 Live Telemetry Stream", value=False)
 
 simulate_fault = st.sidebar.toggle(
     f"🚨 Inject Fault ({selected_node[-5:]})", 
@@ -66,30 +68,45 @@ simulate_fault = st.sidebar.toggle(
     key=f"fault_{selected_asset}_{selected_node}"
 )
 
-# 3. Robust Data Generator (Updated for high stability)
-def generate_telemetry(asset_name, node_name, inject_fault):
-    seed_offset = abs(hash(asset_name + node_name)) % 10000
-    np.random.seed(seed_offset)
-    
-    now = pd.Timestamp.now()
-    times = [now - pd.Timedelta(minutes=i) for i in range(100)][::-1]
-    
-    pressure = 45.0 + np.random.normal(0, 0.02, 100)
-    vibration = 2.1 + np.random.normal(0, 0.03, 100)
-    temperature = 62.0 + np.random.normal(0, 0.01, 100)
-    acoustic = 120.0 + np.random.normal(0, 0.5, 100)
-    
-    if inject_fault:
-        np.random.seed(None)
-        severity = np.random.choice([1.0, 2.5]) 
-        acoustic[-15:] += np.linspace(10, 50 * severity, 15) + np.random.normal(0, 2, 15)
-        vibration[-15:] += np.linspace(0.5, 2.5 * severity, 15) + np.random.normal(0, 0.1, 15)
-        pressure[-15:] -= np.linspace(0.2, 2.0 * severity, 15) + np.random.normal(0, 0.05, 15)
-        temperature[-15:] += np.linspace(0.1, 1.5 * severity, 15) + np.random.normal(0, 0.02, 15)
-        
-    return pd.DataFrame({"Time": times, "Pressure": pressure, "Vibration": vibration, "Temp": temperature, "Acoustic": acoustic})
+# 3. Live Data Buffer Management (FIFO Queue)
+buffer_key = f"buffer_{selected_asset}_{selected_node}"
 
-df = generate_telemetry(selected_asset, selected_node, simulate_fault)
+# If the buffer doesn't exist for this specific node, generate the initial 100 historical points
+if buffer_key not in st.session_state:
+    np.random.seed(abs(hash(buffer_key)) % 10000)
+    now = pd.Timestamp.now()
+    # Spaced by seconds so the live feed scrolls naturally
+    times = [now - pd.Timedelta(seconds=i) for i in range(100)][::-1] 
+    st.session_state[buffer_key] = pd.DataFrame({
+        "Time": times,
+        "Pressure": 45.0 + np.random.normal(0, 0.02, 100),
+        "Vibration": 2.1 + np.random.normal(0, 0.03, 100),
+        "Temp": 62.0 + np.random.normal(0, 0.01, 100),
+        "Acoustic": 120.0 + np.random.normal(0, 0.5, 100)
+    })
+
+# Extract a working copy of the buffer for the UI
+df = st.session_state[buffer_key].copy()
+
+# Apply immediate visual fault if injected (ensures UI updates instantly)
+if simulate_fault:
+    severity = 2.0
+    df.loc[df.index[-15:], 'Acoustic'] += np.linspace(10, 50 * severity, 15) + np.random.normal(0, 2, 15)
+    df.loc[df.index[-15:], 'Vibration'] += np.linspace(0.5, 2.5 * severity, 15) + np.random.normal(0, 0.1, 15)
+    df.loc[df.index[-15:], 'Pressure'] -= np.linspace(0.2, 2.0 * severity, 15) + np.random.normal(0, 0.05, 15)
+    df.loc[df.index[-15:], 'Temp'] += np.linspace(0.1, 1.5 * severity, 15) + np.random.normal(0, 0.02, 15)
+
+# If Live Stream is ON, generate 1 fresh baseline point, append it, and trim the buffer back to 100 points
+if live_stream:
+    new_row = pd.DataFrame({
+        "Time": [pd.Timestamp.now()],
+        "Pressure": [45.0 + np.random.normal(0, 0.02)],
+        "Vibration": [2.1 + np.random.normal(0, 0.03)],
+        "Temp": [62.0 + np.random.normal(0, 0.01)],
+        "Acoustic": [120.0 + np.random.normal(0, 0.5)]
+    })
+    st.session_state[buffer_key] = pd.concat([st.session_state[buffer_key].iloc[1:], new_row], ignore_index=True)
+
 
 # 4. Calibrated AI & Priority Scoring System
 features = df[["Pressure", "Vibration", "Temp", "Acoustic"]]
@@ -220,3 +237,8 @@ with tab_schedule:
     | 2026-09-04 | Remote Valve V-102 | Node 01: Main | Seal Inspection | Bravo Team | Medium |
     | 2026-09-05 | Tank B (Jeddah) | Node 04: Bypass | Thermal Scan | Charlie Team | Low |
     """)
+
+# 6. Live Stream Trigger
+if live_stream:
+    time.sleep(1)
+    st.rerun()
