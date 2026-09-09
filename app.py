@@ -36,6 +36,9 @@ st.markdown("""
     [data-testid="stToolbar"] {visibility: hidden !important;}
     [data-testid="stHeader"] {background-color: transparent !important;}
     footer {visibility: hidden !important;}
+    
+    /* LOCK SIDEBAR: Hides the minimize arrow << */
+    [data-testid="stSidebarCollapseButton"] {display: none !important;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -56,7 +59,16 @@ selected_node = st.sidebar.selectbox("📍 Select Sensor Node", [
     "Node 04: Bypass Valve"
 ])
 
-st.sidebar.markdown("<div style='height: 25vh;'></div>", unsafe_allow_html=True)
+# GPS LOCATION MAPPING
+gps_links = {
+    "Pump Station #03 (Yanbu)": "https://www.google.com/maps/search/?api=1&query=24.0232,38.1811",
+    "Remote Valve V-102 (East-West)": "https://www.google.com/maps/search/?api=1&query=24.1500,44.5000",
+    "Fuel Storage Tank B (Jeddah)": "https://www.google.com/maps/search/?api=1&query=21.4858,39.1925"
+}
+
+st.sidebar.link_button("🗺️ View Facility GPS Location", gps_links[selected_asset], use_container_width=True)
+
+st.sidebar.markdown("<div style='height: 20vh;'></div>", unsafe_allow_html=True)
 st.sidebar.markdown("---")
 st.sidebar.subheader("Diagnostic Controls")
 
@@ -71,11 +83,9 @@ simulate_fault = st.sidebar.toggle(
 # 3. Live Data Buffer Management (FIFO Queue)
 buffer_key = f"buffer_{selected_asset}_{selected_node}"
 
-# If the buffer doesn't exist for this specific node, generate the initial 100 historical points
 if buffer_key not in st.session_state:
     np.random.seed(abs(hash(buffer_key)) % 10000)
     now = pd.Timestamp.now()
-    # Spaced by seconds so the live feed scrolls naturally
     times = [now - pd.Timedelta(seconds=i) for i in range(100)][::-1] 
     st.session_state[buffer_key] = pd.DataFrame({
         "Time": times,
@@ -85,10 +95,8 @@ if buffer_key not in st.session_state:
         "Acoustic": 120.0 + np.random.normal(0, 0.5, 100)
     })
 
-# Extract a working copy of the buffer for the UI
 df = st.session_state[buffer_key].copy()
 
-# Apply immediate visual fault if injected (ensures UI updates instantly)
 if simulate_fault:
     severity = 2.0
     df.loc[df.index[-15:], 'Acoustic'] += np.linspace(10, 50 * severity, 15) + np.random.normal(0, 2, 15)
@@ -96,7 +104,6 @@ if simulate_fault:
     df.loc[df.index[-15:], 'Pressure'] -= np.linspace(0.2, 2.0 * severity, 15) + np.random.normal(0, 0.05, 15)
     df.loc[df.index[-15:], 'Temp'] += np.linspace(0.1, 1.5 * severity, 15) + np.random.normal(0, 0.02, 15)
 
-# If Live Stream is ON, generate 1 fresh baseline point, append it, and trim the buffer back to 100 points
 if live_stream:
     new_row = pd.DataFrame({
         "Time": [pd.Timestamp.now()],
@@ -106,7 +113,6 @@ if live_stream:
         "Acoustic": [120.0 + np.random.normal(0, 0.5)]
     })
     st.session_state[buffer_key] = pd.concat([st.session_state[buffer_key].iloc[1:], new_row], ignore_index=True)
-
 
 # 4. Calibrated AI & Priority Scoring System
 features = df[["Pressure", "Vibration", "Temp", "Acoustic"]]
