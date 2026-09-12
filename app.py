@@ -27,7 +27,7 @@ except Exception:
 # 1. Page Configuration & Custom Theme Injection
 st.set_page_config(page_title="Pulse of the Pipe | Diagnostics", layout="wide", initial_sidebar_state="expanded")
 
-# Surgical CSS: Kills the GitHub/Fork toolbar but leaves the sidebar arrow completely untouched
+# SURGICAL CSS: Hides Deploy/Fork, makes header transparent, and locks the Expand arrow in plain sight.
 st.markdown("""
 <style>
     .stApp {
@@ -36,13 +36,34 @@ st.markdown("""
     div[data-testid="stSidebar"] {
         background-color: #111111;
     }
-    /* Completely destroy the top-right toolbar containing Fork, GitHub, and Deploy */
-    [data-testid="stToolbar"] {
-        display: none !important;
+    
+    /* Make top header transparent to blend with the dark background */
+    [data-testid="stHeader"] {
+        background-color: transparent !important;
     }
-    /* Remove the Streamlit footer */
-    footer {
-        display: none !important;
+    
+    /* SNIPER STRIKE: Hide only the Deploy button and GitHub/Fork links */
+    .stAppDeployButton { 
+        display: none !important; 
+    }
+    a[href*="github.com"] { 
+        display: none !important; 
+    }
+    
+    /* Hide Streamlit footer */
+    footer { 
+        visibility: hidden !important; 
+    }
+    
+    /* FORCE THE EXPAND ARROW (>) TO ALWAYS SHOW AND LOOK PROFESSIONAL */
+    [data-testid="collapsedControl"] {
+        display: flex !important;
+        visibility: visible !important;
+        color: #00FFAA !important; 
+        background-color: #111111 !important;
+        border-radius: 4px;
+        padding: 5px;
+        z-index: 999999 !important;
     }
 </style>
 """, unsafe_allow_html=True)
