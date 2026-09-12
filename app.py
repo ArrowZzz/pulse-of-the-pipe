@@ -27,7 +27,6 @@ except Exception:
 # 1. Page Configuration & Custom Theme Injection
 st.set_page_config(page_title="Pulse of the Pipe | Diagnostics", layout="wide", initial_sidebar_state="expanded")
 
-# Cleaned CSS: Only applies the industrial color palette. No more layout breaking.
 st.markdown("""
 <style>
     .stApp {
@@ -35,6 +34,10 @@ st.markdown("""
     }
     div[data-testid="stSidebar"] {
         background-color: #111111;
+    }
+    /* Specifically hide the Deploy button so it doesn't show during your presentation */
+    .stAppDeployButton, [data-testid="stAppDeployButton"] {
+        display: none !important;
     }
 </style>
 """, unsafe_allow_html=True)
