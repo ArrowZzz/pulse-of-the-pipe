@@ -1,8 +1,9 @@
 import streamlit as st
-import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 import time
+import datetime
+import copy
 
 # --- ANTI-CRASH FALLBACK FOR WINDOWS ---
 try:
@@ -15,7 +16,8 @@ except Exception:
             return self
         def decision_function(self, X):
             scores = []
-            for val in X["Acoustic"]:
+            for row in X:
+                val = row[3] 
                 if val > 130: scores.append(-0.2)
                 elif val > 125: scores.append(-0.05)
                 else: scores.append(0.05)
@@ -25,6 +27,7 @@ except Exception:
 # 1. Page Configuration & Custom Theme Injection
 st.set_page_config(page_title="Pulse of the Pipe | Diagnostics", layout="wide", initial_sidebar_state="expanded")
 
+# Cleaned CSS: Only applies the industrial color palette. No more layout breaking.
 st.markdown("""
 <style>
     .stApp {
@@ -33,12 +36,6 @@ st.markdown("""
     div[data-testid="stSidebar"] {
         background-color: #111111;
     }
-    [data-testid="stToolbar"] {visibility: hidden !important;}
-    [data-testid="stHeader"] {background-color: transparent !important;}
-    footer {visibility: hidden !important;}
-    
-    /* LOCK SIDEBAR: Hides the minimize arrow << */
-    [data-testid="stSidebarCollapseButton"] {display: none !important;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -80,49 +77,49 @@ simulate_fault = st.sidebar.toggle(
     key=f"fault_{selected_asset}_{selected_node}"
 )
 
-# 3. Live Data Buffer Management (FIFO Queue)
+# 3. Live Data Buffer Management (Pandas completely removed)
 buffer_key = f"buffer_{selected_asset}_{selected_node}"
 
 if buffer_key not in st.session_state:
     np.random.seed(abs(hash(buffer_key)) % 10000)
-    now = pd.Timestamp.now()
-    times = [now - pd.Timedelta(seconds=i) for i in range(100)][::-1] 
-    st.session_state[buffer_key] = pd.DataFrame({
+    now = datetime.datetime.now()
+    times = [now - datetime.timedelta(seconds=i) for i in range(100)][::-1] 
+    
+    st.session_state[buffer_key] = {
         "Time": times,
         "Pressure": 45.0 + np.random.normal(0, 0.02, 100),
         "Vibration": 2.1 + np.random.normal(0, 0.03, 100),
         "Temp": 62.0 + np.random.normal(0, 0.01, 100),
         "Acoustic": 120.0 + np.random.normal(0, 0.5, 100)
-    })
+    }
 
-df = st.session_state[buffer_key].copy()
+df = copy.deepcopy(st.session_state[buffer_key])
 
 if simulate_fault:
     severity = 2.0
-    df.loc[df.index[-15:], 'Acoustic'] += np.linspace(10, 50 * severity, 15) + np.random.normal(0, 2, 15)
-    df.loc[df.index[-15:], 'Vibration'] += np.linspace(0.5, 2.5 * severity, 15) + np.random.normal(0, 0.1, 15)
-    df.loc[df.index[-15:], 'Pressure'] -= np.linspace(0.2, 2.0 * severity, 15) + np.random.normal(0, 0.05, 15)
-    df.loc[df.index[-15:], 'Temp'] += np.linspace(0.1, 1.5 * severity, 15) + np.random.normal(0, 0.02, 15)
+    df['Acoustic'][-15:] += np.linspace(10, 50 * severity, 15) + np.random.normal(0, 2, 15)
+    df['Vibration'][-15:] += np.linspace(0.5, 2.5 * severity, 15) + np.random.normal(0, 0.1, 15)
+    df['Pressure'][-15:] -= np.linspace(0.2, 2.0 * severity, 15) + np.random.normal(0, 0.05, 15)
+    df['Temp'][-15:] += np.linspace(0.1, 1.5 * severity, 15) + np.random.normal(0, 0.02, 15)
 
 if live_stream:
-    new_row = pd.DataFrame({
-        "Time": [pd.Timestamp.now()],
-        "Pressure": [45.0 + np.random.normal(0, 0.02)],
-        "Vibration": [2.1 + np.random.normal(0, 0.03)],
-        "Temp": [62.0 + np.random.normal(0, 0.01)],
-        "Acoustic": [120.0 + np.random.normal(0, 0.5)]
-    })
-    st.session_state[buffer_key] = pd.concat([st.session_state[buffer_key].iloc[1:], new_row], ignore_index=True)
+    st.session_state[buffer_key]["Time"].append(datetime.datetime.now())
+    st.session_state[buffer_key]["Time"].pop(0)
+    
+    st.session_state[buffer_key]["Pressure"] = np.append(st.session_state[buffer_key]["Pressure"][1:], 45.0 + np.random.normal(0, 0.02))
+    st.session_state[buffer_key]["Vibration"] = np.append(st.session_state[buffer_key]["Vibration"][1:], 2.1 + np.random.normal(0, 0.03))
+    st.session_state[buffer_key]["Temp"] = np.append(st.session_state[buffer_key]["Temp"][1:], 62.0 + np.random.normal(0, 0.01))
+    st.session_state[buffer_key]["Acoustic"] = np.append(st.session_state[buffer_key]["Acoustic"][1:], 120.0 + np.random.normal(0, 0.5))
 
-# 4. Calibrated AI & Priority Scoring System
-features = df[["Pressure", "Vibration", "Temp", "Acoustic"]]
-iso_forest = IsolationForest(contamination=0.01, random_state=42).fit(features.iloc[:75])
-anomaly_scores = iso_forest.decision_function(features.iloc[-10:])
+# 4. Calibrated AI & Priority Scoring System (Numpy Native)
+features = np.column_stack((df["Pressure"], df["Vibration"], df["Temp"], df["Acoustic"]))
+iso_forest = IsolationForest(contamination=0.01, random_state=42).fit(features[:75])
+anomaly_scores = iso_forest.decision_function(features[-10:])
 
 is_warning = (anomaly_scores < -0.02).sum() >= 3
 is_critical = (anomaly_scores < -0.15).sum() >= 3
 
-last_check_time = df["Time"].iloc[-1].strftime("%Y-%m-%d %H:%M:%S")
+last_check_time = df["Time"][-1].strftime("%Y-%m-%d %H:%M:%S")
 anomaly_time = "N/A"
 
 if is_warning or is_critical:
@@ -130,7 +127,7 @@ if is_warning or is_critical:
     anomalous_indices = np.where(anomaly_scores < threshold)[0]
     if len(anomalous_indices) > 0:
         first_anomaly_idx = anomalous_indices[0]
-        anomaly_time = df.iloc[-10 + first_anomaly_idx]["Time"].strftime("%Y-%m-%d %H:%M:%S")
+        anomaly_time = df["Time"][-10 + first_anomaly_idx].strftime("%Y-%m-%d %H:%M:%S")
 
 # 5. UI Layout - Tabs for Dashboard vs. Scheduling
 st.title("🛢️ Pulse of the Pipe | Smart Inspection Platform")
@@ -163,16 +160,16 @@ with tab_monitor:
 
     st.markdown("---")
     m1, m2, m3, m4 = st.columns(4)
-    m1.metric("Pressure", f"{df['Pressure'].iloc[-1]:.2f} bar")
-    m2.metric("Vibration", f"{df['Vibration'].iloc[-1]:.2f} mm/s")
-    m3.metric("Surface Temp", f"{df['Temp'].iloc[-1]:.1f} °C")
-    m4.metric("Acoustic Emission", f"{df['Acoustic'].iloc[-1]:.0f} kHz")
+    m1.metric("Pressure", f"{df['Pressure'][-1]:.2f} bar")
+    m2.metric("Vibration", f"{df['Vibration'][-1]:.2f} mm/s")
+    m3.metric("Surface Temp", f"{df['Temp'][-1]:.1f} °C")
+    m4.metric("Acoustic Emission", f"{df['Acoustic'][-1]:.0f} kHz")
 
     st.markdown("### 🌐 Consolidated Asset Health KPI")
     
-    df_norm = df.copy()
+    df_norm = {"Time": df["Time"]}
     for col in ["Pressure", "Vibration", "Temp", "Acoustic"]:
-        baseline_mean = df[col].iloc[:75].mean()
+        baseline_mean = np.mean(df[col][:75])
         df_norm[col] = (df[col] / baseline_mean) * 100
 
     fig_kpi = go.Figure()
@@ -193,9 +190,9 @@ with tab_monitor:
 
     st.markdown("### 🔍 Telemetry Breakdown")
     
-    def create_sensor_graph(data, y_col, title, line_color, upper_limit=None, lower_limit=None):
+    def create_sensor_graph(data_dict, y_col, title, line_color, upper_limit=None, lower_limit=None):
         fig = go.Figure()
-        fig.add_trace(go.Scatter(x=data["Time"], y=data[y_col], mode='lines', name=title, line=dict(color=line_color, width=2)))
+        fig.add_trace(go.Scatter(x=data_dict["Time"], y=data_dict[y_col], mode='lines', name=title, line=dict(color=line_color, width=2)))
         if upper_limit:
             fig.add_hline(y=upper_limit, line_dash="dash", line_color="gray")
         if lower_limit:
