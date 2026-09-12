@@ -27,6 +27,7 @@ except Exception:
 # 1. Page Configuration & Custom Theme Injection
 st.set_page_config(page_title="Pulse of the Pipe | Diagnostics", layout="wide", initial_sidebar_state="expanded")
 
+# Surgical CSS: Kills the GitHub/Fork toolbar but leaves the sidebar arrow completely untouched
 st.markdown("""
 <style>
     .stApp {
@@ -35,8 +36,12 @@ st.markdown("""
     div[data-testid="stSidebar"] {
         background-color: #111111;
     }
-    /* Specifically hide the Deploy button so it doesn't show during your presentation */
-    .stAppDeployButton, [data-testid="stAppDeployButton"] {
+    /* Completely destroy the top-right toolbar containing Fork, GitHub, and Deploy */
+    [data-testid="stToolbar"] {
+        display: none !important;
+    }
+    /* Remove the Streamlit footer */
+    footer {
         display: none !important;
     }
 </style>
